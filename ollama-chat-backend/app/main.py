@@ -1,6 +1,8 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends, HTTPException, Header
 from fastapi.middleware.cors import CORSMiddleware
 from app.routers.chat import router as chat_router
+from app.routers.user import router as user_router
+
 
 app = FastAPI()
 
@@ -13,7 +15,17 @@ app.add_middleware(
 )
 
 app.include_router(chat_router)
+app.include_router(user_router)
 
 @app.get("/")
 def read_root():
     return {"status": "ok"}
+
+# Call this on startup
+# @app.on_event("startup")
+# def on_startup():
+#     create_db_and_tables()
+
+
+
+

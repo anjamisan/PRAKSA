@@ -6,17 +6,102 @@ type Message = {
     content: string;
 };
 
-const Chat: React.FC = () => {
+interface ChatProps {
+    selectedChatId: number | null;
+    authToken: string | null;
+    onCreateChat?: (title: string) => Promise<void>;
+}
+
+const Chat: React.FC<ChatProps> = ({ selectedChatId, authToken, onCreateChat }) => {
     const [messages, setMessages] = useState<Message[]>([]);
     const [input, setInput] = useState<string>("");
+    const [chatTitle, setChatTitle] = useState<string>("New Chat");
+    const [chatCreated, setChatCreated] = useState<boolean>(false);
     const sessionIdRef = useRef<string>(crypto.randomUUID());
     const controllerRef = useRef<AbortController | null>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
+
+
 
     // Scroll to bottom whenever messages change
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     }, [messages]);
+
+    ////handle chat switching
+
+    useEffect(() => {
+        if (selectedChatId !== null && authToken) {
+            // Fetch messages for the selected chat
+            const fetchMessages = async () => {
+                try {
+                    const res = await fetch(`http://localhost:8000/chats/${selectedChatId}`, {
+                        headers: { Authorization: `Bearer ${authToken}` },
+                    });
+                    if (!res.ok) throw new Error("Failed to fetch messages");
+
+                    const data = await res.json();
+                    // Handle case where backend returns null or not an array
+                    const messagesArray = Array.isArray(data) ? data : [];
+                    setMessages(messagesArray);
+                    setChatCreated(true);
+                    sessionIdRef.current = crypto.randomUUID();
+                } catch (err) {
+                    console.error(err);
+                    setMessages([{ role: "assistant", content: "Error loading chat" }]);
+                }
+            };
+
+            fetchMessages();
+        }
+    }, [selectedChatId, authToken]);
+
+
+    /// Handle new chat
+
+    useEffect(() => {
+        if (selectedChatId === null) {
+            setMessages([]);
+            setChatTitle("New Chat");
+            setChatCreated(false);
+            sessionIdRef.current = crypto.randomUUID(); // new session ID for new chat
+        } else {
+            // optional: fetch existing messages for selected chat
+        }
+    }, [selectedChatId]);
+
+
+    // Handle chat creation when first message is sent
+    useEffect(() => {
+        if (!chatCreated && messages.length > 0 && authToken && onCreateChat) {
+            // Infer title from first user message (first 50 characters)
+            const firstUserMessage = messages.find(m => m.role === "user");
+            if (firstUserMessage) {
+                const inferredTitle = firstUserMessage.content.substring(0, 50) +
+                    (firstUserMessage.content.length > 50 ? "..." : "");
+                setChatTitle(inferredTitle);
+                setChatCreated(true);
+                onCreateChat(inferredTitle);
+            }
+        }
+    }, [messages, chatCreated, authToken, onCreateChat]);
+
+    const saveMessageToDatabase = async (chatId: number, role: string, content: string) => {
+        if (!authToken) return;
+
+        try {
+            await fetch(`http://localhost:8000/chats/${chatId}/messages`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${authToken}`,
+                },
+                body: JSON.stringify({ role, content }),
+            });
+        } catch (err) {
+            console.error("Failed to save message to database:", err);
+        }
+    };
 
     const sendMessage = async (newPrompt?: string) => {
         const prompt = newPrompt ?? input;
@@ -28,6 +113,11 @@ const Chat: React.FC = () => {
             { role: "assistant", content: "" },
         ]);
         setInput("");
+
+        // Save user message to database if logged in and chat exists
+        if (authToken && selectedChatId) {
+            await saveMessageToDatabase(selectedChatId, "user", prompt);
+        }
 
         controllerRef.current?.abort();
 
@@ -77,6 +167,11 @@ const Chat: React.FC = () => {
                         }
                         return newMessages;
                     });
+                }
+
+                // Save assistant message to database after streaming completes
+                if (authToken && selectedChatId && accumulatedContent) {
+                    await saveMessageToDatabase(selectedChatId, "assistant", accumulatedContent);
                 }
             }
         } catch (err) {
@@ -128,7 +223,12 @@ const Chat: React.FC = () => {
         <div className="flex flex-col h-screen bg-gray-100 justify-center items-center">
             <div className="flex flex-col w-full max-w-xl h-4/5 border rounded-xl shadow-lg bg-white overflow-hidden">
                 {/* Messages */}
-                <div className="flex-1 overflow-y-auto p-6 space-y-4 bg-gray-50">
+                <div className="flex-1 overflow-y-auto p-6 space-y-4 bg-gray-50 relative">
+                    {messages.length === 0 && selectedChatId === null && (
+                        <div className="absolute inset-0 flex justify-center items-center text-gray-400 text-sm">
+                            Start a new chat
+                        </div>
+                    )}
                     {messages.map((msg, i) => (
                         <div
                             key={i}
