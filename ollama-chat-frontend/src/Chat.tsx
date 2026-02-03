@@ -1,4 +1,7 @@
 import { useState, useRef, useEffect, type KeyboardEvent, type ChangeEvent } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+
 
 // Message type
 type Message = {
@@ -9,7 +12,8 @@ type Message = {
 interface ChatProps {
     selectedChatId: number | null;
     authToken: string | null;
-    onCreateChat?: (title: string) => Promise<void>;
+    // Returns the new chat's ID when a chat is created
+    onCreateChat?: (title: string) => Promise<number>;
 }
 
 const Chat: React.FC<ChatProps> = ({ selectedChatId, authToken, onCreateChat }) => {
@@ -20,19 +24,34 @@ const Chat: React.FC<ChatProps> = ({ selectedChatId, authToken, onCreateChat }) 
     const sessionIdRef = useRef<string>(crypto.randomUUID());
     const controllerRef = useRef<AbortController | null>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
+    const currentChatIdRef = useRef<number | null>(null); //handles the scenario where the user clicks on the same chat
+    //or makes a new chat, to avoid refetching messages unnecessarily
+    //WHENEVER selectedChatId changes, we check if it's different from currentChatIdRef.current
+    //in the case where we make a new chat, without currentChatIdRef.current,
+    //the creation of the chatid would trigger an useffect which would fetch the messages from the database 
+    //before they were even stored
 
 
+    /////////////////////Scroll to bottom whenever messages change//////////////////////
 
-    // Scroll to bottom whenever messages change
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     }, [messages]);
 
-    ////handle chat switching
+    ////////////////////////Handle chat switching and new chat creation//////////////////
 
     useEffect(() => {
-        if (selectedChatId !== null && authToken) {
-            // Fetch messages for the selected chat
+        console.log("Selected chat ID changed to:", selectedChatId);
+        if (selectedChatId === null) {
+            // New chat: reset everything
+            setMessages([]);
+            setChatTitle("New Chat");
+            setChatCreated(false);
+            currentChatIdRef.current = null;
+            sessionIdRef.current = crypto.randomUUID();
+        } else if (authToken && selectedChatId !== currentChatIdRef.current) {
+            // Switching to a different existing chat: fetch messages from backend
+            console.log("Fetching messages for chat ID:", selectedChatId);
             const fetchMessages = async () => {
                 try {
                     const res = await fetch(`http://localhost:8000/chats/${selectedChatId}`, {
@@ -41,10 +60,11 @@ const Chat: React.FC<ChatProps> = ({ selectedChatId, authToken, onCreateChat }) 
                     if (!res.ok) throw new Error("Failed to fetch messages");
 
                     const data = await res.json();
-                    // Handle case where backend returns null or not an array
                     const messagesArray = Array.isArray(data) ? data : [];
                     setMessages(messagesArray);
+                    console.log("Fetched messages:", messagesArray);
                     setChatCreated(true);
+                    currentChatIdRef.current = selectedChatId; // Update current chat ID so we don't refetch unnecessarily
                     sessionIdRef.current = crypto.randomUUID();
                 } catch (err) {
                     console.error(err);
@@ -54,37 +74,7 @@ const Chat: React.FC<ChatProps> = ({ selectedChatId, authToken, onCreateChat }) 
 
             fetchMessages();
         }
-    }, [selectedChatId, authToken]);
-
-
-    /// Handle new chat
-
-    useEffect(() => {
-        if (selectedChatId === null) {
-            setMessages([]);
-            setChatTitle("New Chat");
-            setChatCreated(false);
-            sessionIdRef.current = crypto.randomUUID(); // new session ID for new chat
-        } else {
-            // optional: fetch existing messages for selected chat
-        }
-    }, [selectedChatId]);
-
-
-    // Handle chat creation when first message is sent
-    useEffect(() => {
-        if (!chatCreated && messages.length > 0 && authToken && onCreateChat) {
-            // Infer title from first user message (first 50 characters)
-            const firstUserMessage = messages.find(m => m.role === "user");
-            if (firstUserMessage) {
-                const inferredTitle = firstUserMessage.content.substring(0, 50) +
-                    (firstUserMessage.content.length > 50 ? "..." : "");
-                setChatTitle(inferredTitle);
-                setChatCreated(true);
-                onCreateChat(inferredTitle);
-            }
-        }
-    }, [messages, chatCreated, authToken, onCreateChat]);
+    }, [selectedChatId, authToken]); //!!!!!!!!!!!!!!!!!!
 
     const saveMessageToDatabase = async (chatId: number, role: string, content: string) => {
         if (!authToken) return;
@@ -103,10 +93,31 @@ const Chat: React.FC<ChatProps> = ({ selectedChatId, authToken, onCreateChat }) 
         }
     };
 
+    ////////////////////////////////////SEND MESSAGE/////////////////////////////////////
+    //////////////////////////////Chat creation will be handled inside sendMessage///////////////////////
+
     const sendMessage = async (newPrompt?: string) => {
         const prompt = newPrompt ?? input;
         if (!prompt.trim()) return;
 
+        // If logged in and no chat yet, create chat first
+        let chatId = selectedChatId;
+        if (authToken && chatId == null && onCreateChat) { //oncreatechat is generally never undefined if there is an authtoken
+            // Infer a title from the prompt
+            const inferredTitle = prompt.substring(0, 50) + (prompt.length > 50 ? "..." : "");
+            setChatTitle(inferredTitle);
+            try {
+                const newId = await onCreateChat(inferredTitle);
+                chatId = newId;
+                setChatCreated(true);
+                currentChatIdRef.current = newId; // Prevent useEffect from fetching and overwriting messages
+                console.log("Created new chat with ID:", newId);
+            } catch (err) {
+                console.error("Failed to create chat before sending message:", err);
+            }
+        }
+
+        // Update UI with user + placeholder assistant message
         setMessages((prev) => [
             ...prev,
             { role: "user", content: prompt },
@@ -114,9 +125,11 @@ const Chat: React.FC<ChatProps> = ({ selectedChatId, authToken, onCreateChat }) 
         ]);
         setInput("");
 
-        // Save user message to database if logged in and chat exists
-        if (authToken && selectedChatId) {
-            await saveMessageToDatabase(selectedChatId, "user", prompt);
+
+        // Save user message to database once we know chatId (works for new and existing chats)
+        if (authToken && chatId != null) {
+            await saveMessageToDatabase(chatId, "user", prompt);
+            console.log("Saved user message to database");
         }
 
         controllerRef.current?.abort();
@@ -138,13 +151,14 @@ const Chat: React.FC<ChatProps> = ({ selectedChatId, authToken, onCreateChat }) 
         controllerRef.current = new AbortController();
 
         try {
+            console.log("Sending message to backend:", prompt);
             const response = await fetch("http://localhost:8000/chat", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ session_id: sessionIdRef.current, message: prompt }),
                 signal: controllerRef.current.signal,
             });
-
+            console.log("Received response from backend");
             if (!response.ok) throw new Error("Server error");
 
             const reader = response.body?.getReader();
@@ -162,16 +176,16 @@ const Chat: React.FC<ChatProps> = ({ selectedChatId, authToken, onCreateChat }) 
                     setMessages((prev) => {
                         const newMessages = [...prev];
                         const lastMessage = newMessages[newMessages.length - 1];
-                        if (lastMessage.role === "assistant") {
+                        // Check if lastMessage exists before accessing its properties
+                        if (lastMessage?.role === "assistant") {
                             lastMessage.content = accumulatedContent;
                         }
                         return newMessages;
                     });
                 }
-
                 // Save assistant message to database after streaming completes
-                if (authToken && selectedChatId && accumulatedContent) {
-                    await saveMessageToDatabase(selectedChatId, "assistant", accumulatedContent);
+                if (authToken && accumulatedContent && (chatId != null)) {
+                    await saveMessageToDatabase(chatId, "assistant", accumulatedContent);
                 }
             }
         } catch (err) {
@@ -193,6 +207,8 @@ const Chat: React.FC<ChatProps> = ({ selectedChatId, authToken, onCreateChat }) 
             controllerRef.current = null;
         }
     };
+
+    ////////////////////////////Handle stopping generation///////////////////////
 
     const stopGeneration = async () => {
         controllerRef.current?.abort();
@@ -220,8 +236,8 @@ const Chat: React.FC<ChatProps> = ({ selectedChatId, authToken, onCreateChat }) 
     };
 
     return (
-        <div className="flex flex-col h-screen bg-gray-100 justify-center items-center">
-            <div className="flex flex-col w-full max-w-xl h-4/5 border rounded-xl shadow-lg bg-white overflow-hidden">
+        <div className="flex flex-col h-full bg-gray-100 p-6">
+            <div className="flex flex-col w-full h-full border rounded-xl shadow-lg bg-white overflow-hidden">
                 {/* Messages */}
                 <div className="flex-1 overflow-y-auto p-6 space-y-4 bg-gray-50 relative">
                     {messages.length === 0 && selectedChatId === null && (
@@ -232,10 +248,39 @@ const Chat: React.FC<ChatProps> = ({ selectedChatId, authToken, onCreateChat }) 
                     {messages.map((msg, i) => (
                         <div
                             key={i}
-                            className={`max-w-[70%] p-3 rounded-lg break-words ${msg.role === "user" ? "bg-blue-200 ml-auto" : "bg-white mr-auto"
+                            className={`max-w-[70%] p-3 rounded-lg break-words ${msg.role === "user"
+                                ? "bg-blue-200 ml-auto"
+                                : "bg-white mr-auto"
                                 }`}
                         >
-                            {msg.content}
+                            {msg.role === "assistant" ? (
+                                <ReactMarkdown
+                                    remarkPlugins={[remarkGfm]}
+                                    className="
+                                        prose prose-base max-w-none
+                                        prose-table:block
+                                        prose-table:overflow-x-auto
+                                        prose-table:rounded-lg
+                                        prose-table:border
+                                        prose-table:border-gray-200
+                                        prose-thead:bg-gray-50
+                                        prose-th:border prose-th:border-gray-200
+                                        prose-td:border prose-td:border-gray-200
+                                        prose-th:px-3 prose-th:py-2
+                                        prose-td:px-3 prose-td:py-2
+                                        prose-th:text-left
+                                        prose-th:font-semibold
+                                        prose-tr:even:bg-gray-50
+                                        prose-td:break-words 
+                                        prose-th:break-words
+                                        "
+                                >
+                                    {msg.content}
+                                </ReactMarkdown>
+
+                            ) : (
+                                msg.content
+                            )}
                         </div>
                     ))}
                     {/* Scroll target */}

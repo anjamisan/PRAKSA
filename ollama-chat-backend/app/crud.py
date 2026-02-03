@@ -38,10 +38,6 @@ def get_user_chats(user_id: int) -> List[Chat]:
     with next(get_session()) as session:
         return session.exec(select(Chat).where(Chat.user_id == user_id)).all()
 
-def get_chat(chat_id: int) -> Chat:
-    with next(get_session()) as session:
-        return session.exec(select(Chat).where(Chat.id == chat_id)).first()
-
 # Messages
 def add_message(chat_id: int, role: str, content: str):
     message = Message(chat_id=chat_id, role=role, content=content, created_at=datetime.now(timezone.utc))

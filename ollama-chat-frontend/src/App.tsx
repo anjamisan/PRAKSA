@@ -99,8 +99,8 @@ const App: React.FC = () => {
     setSelectedChatId(null);
   };
 
-  const handleCreateChat = async (title: string) => {
-    if (!authToken) return;
+  const handleCreateChat = async (title: string): Promise<number> => {
+    if (!authToken) throw new Error("Not authenticated");
 
     try {
       const response = await fetch("http://localhost:8000/chats", {
@@ -112,13 +112,17 @@ const App: React.FC = () => {
         body: JSON.stringify({ title }),
       });
 
-      if (response.ok) {
-        const newChat = await response.json();
-        setChats((prev) => [...prev, newChat]);
-        setSelectedChatId(newChat.id);
+      if (!response.ok) {
+        throw new Error("Failed to create chat");
       }
+
+      const newChat = await response.json();
+      setChats((prev) => [...prev, newChat]);
+      setSelectedChatId(newChat.id);
+      return newChat.id;
     } catch (err) {
       console.error("Failed to create chat:", err);
+      throw err;
     }
   };
 
@@ -127,6 +131,7 @@ const App: React.FC = () => {
   };
 
   const handleDeleteChat = async (chatId: number) => {
+    console.log("Deleting chat with ID:", chatId);
     if (!authToken) return;
 
     try {

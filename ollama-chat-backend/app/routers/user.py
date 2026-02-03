@@ -1,6 +1,6 @@
 from fastapi import FastAPI, Depends, HTTPException, Header, APIRouter
 from typing import List
-from app.crud import create_user, authenticate_user, create_chat, get_user_chats, add_message, get_chat_messages, delete_chat, get_chat
+from app.crud import create_user, authenticate_user, create_chat, get_user_chats, add_message, get_chat_messages, delete_chat
 from app.auth import create_jwt, verify_jwt
 from app.models import RegisterRequest, LoginRequest, ChatRequest, MessageRequest
 
@@ -52,12 +52,10 @@ def create_message(chat_id: int, req: MessageRequest, user_id: int = Depends(get
 
 @router.get("/chats/{chat_id}")
 def chat_history(chat_id: int, user_id: int = Depends(get_current_user)):
-    chat = get_chat(chat_id)
-    if not chat or chat.user_id != user_id:
-        raise HTTPException(status_code=404, detail="Chat not found")
-    
+    # Optional: verify chat belongs to user
     messages = get_chat_messages(chat_id)
-    return {"messages": messages, "title": chat.title}
+    #print("Retrieved messages for chat_id", chat_id, ":", messages.__len__())
+    return messages
 
 @router.delete("/chats/{chat_id}")
 def delete_chat_endpoint(chat_id: int, user_id: int = Depends(get_current_user)):

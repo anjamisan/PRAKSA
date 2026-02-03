@@ -1,5 +1,6 @@
 from pydantic import BaseModel
 from sqlmodel import SQLModel, Field, Relationship
+from sqlalchemy import Column, Integer, ForeignKey
 from typing import Optional, List
 from datetime import datetime
 
@@ -49,15 +50,20 @@ class Chat(SQLModel, table=True):
     created_at: datetime
 
     user: Optional[User] = Relationship(back_populates="chats")
-    messages: List["Message"] = Relationship(back_populates="chat")
+    messages: List["Message"] = Relationship(back_populates="chat", sa_relationship_kwargs={"passive_deletes": True})
 
 
 class Message(SQLModel, table=True):
     __tablename__ = "messages"
     id: Optional[int] = Field(default=None, primary_key=True)
-    chat_id: int = Field(foreign_key="chats.id")
+    chat_id: int = Field(
+        sa_column=Column(
+            Integer,
+            ForeignKey("chats.id", ondelete="CASCADE"),
+            nullable=False
+        )
+    )
     role: str  # 'system', 'user', 'assistant', 'tool'
     content: str
     created_at: datetime
-
-    chat: Optional[Chat] = Relationship(back_populates="messages")
+    chat: Optional["Chat"] = Relationship(back_populates="messages")
