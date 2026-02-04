@@ -1,9 +1,10 @@
 import uuid
 from datetime import datetime
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request, UploadFile
 from fastapi.responses import StreamingResponse
 import json
 import ollama
+import base64
 
 from app.models import ConversationRequest, StopRequest
 from app.sessions import sessions, SessionState
@@ -69,13 +70,19 @@ def handle_tool_calls(session: SessionState, tool_calls: list[dict]):
     session.messages.extend(tool_messages)
 
 
-def generate_response(session: SessionState, user_message: str):
+def generate_response(session: SessionState, user_message: str, images: list[bytes] = None):
     # Create a unique generation id
     generation_id = str(uuid.uuid4())
     session.generation_id = generation_id
     session.cancel_event.clear()
 
-    session.messages.append({"role": "user", "content": user_message})
+    # Build user message with optional images
+    user_msg = {"role": "user", "content": user_message}
+    if images:
+        # Ollama expects base64-encoded images
+        user_msg["images"] = [base64.b64encode(img).decode("utf-8") for img in images]
+    
+    session.messages.append(user_msg)
     response_content = ""
 
     for part in client.chat(
@@ -128,18 +135,46 @@ def generate_response(session: SessionState, user_message: str):
 
 
 @router.post("/chat")
-async def chat_endpoint(request: ConversationRequest):
-    if not request.message.strip():
-        raise HTTPException(status_code=400, detail="No message provided")
+async def chat_endpoint(request: Request):
+    content_type = request.headers.get("content-type", "")
+    
+    if "multipart/form-data" in content_type:
+        # Handle FormData with images
+        form = await request.form()
+        session_id = form.get("session_id")
+        message = form.get("message", "")
+        
+        # Get all uploaded images
+        image_data = []
+        for key in form:
+            if key == "images":
+                files = form.getlist("images")
+                for file in files:
+                    if isinstance(file, UploadFile):
+                        img_bytes = await file.read()
+                        image_data.append(img_bytes)
+        
+        if not message.strip() and not image_data:
+            raise HTTPException(status_code=400, detail="No message or images provided")
+        
+    else:
+        # Handle JSON (text-only)
+        body = await request.json()
+        session_id = body.get("session_id")
+        message = body.get("message", "")
+        image_data = None
+        
+        if not message.strip():
+            raise HTTPException(status_code=400, detail="No message provided")
 
     # Get or create session
-    if request.session_id not in sessions:
-        sessions[request.session_id] = SessionState()
+    if session_id not in sessions:
+        sessions[session_id] = SessionState()
 
-    session = sessions[request.session_id]
+    session = sessions[session_id]
 
     return StreamingResponse(
-        generate_response(session, request.message),
+        generate_response(session, message, image_data),
         media_type="text/plain",
     )
 

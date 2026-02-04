@@ -1,8 +1,8 @@
 import { useState, useEffect } from "react";
-import Chat from "./Chat";
-import NavBar from "./NavBar";
-import Sidebar from "./Sidebar";
-import AuthModal from "./AuthModal";
+import Chat from "./components/Chat";
+import NavBar from "./components/NavBar";
+import Sidebar from "./components/Sidebar";
+import AuthModal from "./components/AuthModal";
 
 interface ChatSession {
   id: number;
