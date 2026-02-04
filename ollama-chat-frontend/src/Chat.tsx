@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, type KeyboardEvent, type ChangeEvent } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { ImagePlus } from "lucide-react";
 
 
 // Message type
@@ -98,7 +99,9 @@ const Chat: React.FC<ChatProps> = ({ selectedChatId, authToken, onCreateChat }) 
 
     const sendMessage = async (newPrompt?: string) => {
         const prompt = newPrompt ?? input;
-        if (!prompt.trim()) return;
+        const imageTokens = attachedImages.map((f) => `[image: ${f.name}]`).join("\n");
+        const fullPrompt = [prompt, imageTokens].filter(Boolean).join("\n");
+        if (!fullPrompt.trim()) return;
 
         // If logged in and no chat yet, create chat first
         let chatId = selectedChatId;
@@ -120,15 +123,15 @@ const Chat: React.FC<ChatProps> = ({ selectedChatId, authToken, onCreateChat }) 
         // Update UI with user + placeholder assistant message
         setMessages((prev) => [
             ...prev,
-            { role: "user", content: prompt },
+            { role: "user", content: fullPrompt },
             { role: "assistant", content: "" },
         ]);
         setInput("");
-
+        setAttachedImages([]);
 
         // Save user message to database once we know chatId (works for new and existing chats)
         if (authToken && chatId != null) {
-            await saveMessageToDatabase(chatId, "user", prompt);
+            await saveMessageToDatabase(chatId, "user", fullPrompt);
             console.log("Saved user message to database");
         }
 
@@ -155,7 +158,7 @@ const Chat: React.FC<ChatProps> = ({ selectedChatId, authToken, onCreateChat }) 
             const response = await fetch("http://localhost:8000/chat", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ session_id: sessionIdRef.current, message: prompt }),
+                body: JSON.stringify({ session_id: sessionIdRef.current, message: fullPrompt }),
                 signal: controllerRef.current.signal,
             });
             console.log("Received response from backend");
@@ -235,6 +238,32 @@ const Chat: React.FC<ChatProps> = ({ selectedChatId, authToken, onCreateChat }) 
         setInput(e.target.value);
     };
 
+    const [attachedImages, setAttachedImages] = useState<File[]>([]);
+    const [isDragging, setIsDragging] = useState<boolean>(false);
+    const fileInputRef = useRef<HTMLInputElement>(null);
+
+    const handleFiles = (files: FileList | null) => {
+        if (!files) return;
+        const images = Array.from(files).filter((f) => f.type.startsWith("image/"));
+        if (images.length === 0) return;
+        setAttachedImages((prev) => [...prev, ...images]);
+    };
+
+    const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+        e.preventDefault();
+        setIsDragging(false);
+        handleFiles(e.dataTransfer.files);
+    };
+
+    const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+        e.preventDefault();
+        setIsDragging(true);
+    };
+
+    const handleDragLeave = () => setIsDragging(false);
+
+    const handlePickImages = () => fileInputRef.current?.click();
+
     return (
         <div className="flex flex-col h-full bg-gray-100 p-6">
             <div className="flex flex-col w-full h-full border rounded-xl shadow-lg bg-white overflow-hidden">
@@ -289,7 +318,42 @@ const Chat: React.FC<ChatProps> = ({ selectedChatId, authToken, onCreateChat }) 
 
                 {/* Input area */}
                 <div className="flex flex-col p-4 bg-white border-t">
-                    <div className="flex space-x-2 justify-center">
+                    {attachedImages.length > 0 && (
+                        <div className="flex flex-wrap gap-2 mb-3">
+                            {attachedImages.map((file, idx) => (
+                                <div key={`${file.name}-${idx}`} className="w-16 h-16 rounded-md border overflow-hidden">
+                                    <img
+                                        src={URL.createObjectURL(file)}
+                                        alt={file.name}
+                                        className="w-full h-full object-cover"
+                                    />
+                                </div>
+                            ))}
+                        </div>
+                    )}
+
+                    <div
+                        className={`flex space-x-2 justify-center ${isDragging ? "ring-2 ring-blue-400 rounded-md" : ""}`}
+                        onDrop={handleDrop}
+                        onDragOver={handleDragOver}
+                        onDragLeave={handleDragLeave}
+                    >
+                        <button
+                            type="button"
+                            onClick={handlePickImages}
+                            className="p-3 border rounded-md text-gray-600 hover:bg-gray-50"
+                            title="Insert image"
+                        >
+                            <ImagePlus size={18} />
+                        </button>
+                        <input
+                            ref={fileInputRef}
+                            type="file"
+                            accept="image/*"
+                            multiple
+                            className="hidden"
+                            onChange={(e) => handleFiles(e.target.files)}
+                        />
                         <input
                             type="text"
                             className="flex-1 p-3 border rounded-md focus:outline-none"

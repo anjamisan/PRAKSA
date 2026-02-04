@@ -79,7 +79,7 @@ def generate_response(session: SessionState, user_message: str):
     response_content = ""
 
     for part in client.chat(
-        model="gpt-oss:120b-cloud",
+        model="gemma3:27b-cloud", #llama3.2:latest
         messages=session.messages,
         tools=tool_definitions,
         stream=True,
@@ -101,7 +101,7 @@ def generate_response(session: SessionState, user_message: str):
 
             # second model call
             for part in client.chat(
-                model="gpt-oss:120b-cloud",
+                model="gemma3:27b-cloud", #llama3.2:latest
                 messages=session.messages,
                 stream=True,
             ):
