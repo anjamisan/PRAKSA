@@ -19,9 +19,12 @@ const Chat: React.FC<ChatProps> = ({ selectedChatId, authToken, onCreateChat }) 
     const [attachedImages, setAttachedImages] = useState<File[]>([]);
     const [chatTitle, setChatTitle] = useState<string>("New Chat");
     const [chatCreated, setChatCreated] = useState<boolean>(false);
+    const [isGenerating, setIsGenerating] = useState<boolean>(false); //to track if we're currently waiting for a response from the backend
+    const [userHasScrolled, setUserHasScrolled] = useState<boolean>(false); //to stop automatic scrolling when user scrolls up during generation
     const sessionIdRef = useRef<string>(crypto.randomUUID());
     const controllerRef = useRef<AbortController | null>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
+    const messagesContainerRef = useRef<HTMLDivElement>(null);
     const currentChatIdRef = useRef<number | null>(null);//handles the scenario where the user clicks on the same chat
     //or makes a new chat, to avoid refetching messages unnecessarily
     //WHENEVER selectedChatId changes, we check if it's different from currentChatIdRef.current
@@ -32,8 +35,30 @@ const Chat: React.FC<ChatProps> = ({ selectedChatId, authToken, onCreateChat }) 
     /////////////////////Scroll to bottom whenever messages change//////////////////////
 
     useEffect(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-    }, [messages]);
+        if (!userHasScrolled) {
+            messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+        }
+    }, [messages, userHasScrolled]);
+
+    // Detect user scroll during generation
+    useEffect(() => {
+        const container = messagesContainerRef.current;
+        if (!container) return;
+
+        const handleScroll = () => {
+            if (isGenerating) {
+                const isAtBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 50;
+                if (!isAtBottom) {
+                    setUserHasScrolled(true);
+                } else {
+                    setUserHasScrolled(false);
+                }
+            }
+        };
+
+        container.addEventListener("scroll", handleScroll);
+        return () => container.removeEventListener("scroll", handleScroll);
+    }, [isGenerating]);
 
     ////////////////////////Handle chat switching and new chat creation//////////////////
 
@@ -88,6 +113,25 @@ const Chat: React.FC<ChatProps> = ({ selectedChatId, authToken, onCreateChat }) 
         }
     };
 
+    ////////////////////////Infer chat title from prompt/////////////////////////////////////////
+
+    const inferChatTitle = async (prompt: string): Promise<string> => {
+        try {
+            const response = await fetch("http://localhost:8000/title", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ message: prompt }),
+            });
+            if (!response.ok)
+                throw new Error("Failed to generate title");
+            const data = await response.json();
+            return data.title || prompt.substring(0, 50) + (prompt.length > 50 ? "..." : "");
+        } catch (err) {
+            console.error("Failed to infer chat title:", err);
+            return prompt.substring(0, 50) + (prompt.length > 50 ? "..." : "");
+        }
+    };
+
     ////////////////////////////////////SEND MESSAGE/////////////////////////////////////
     //////////////////////////////Chat creation will be handled inside sendMessage///////////////////////
 
@@ -99,9 +143,13 @@ const Chat: React.FC<ChatProps> = ({ selectedChatId, authToken, onCreateChat }) 
         const displayPrompt = [prompt, imageNames].filter(Boolean).join("\n");
         if (!prompt.trim() && images.length === 0) return;
 
+        // Reset scroll tracking when sending a new message
+        setUserHasScrolled(false);
+        setIsGenerating(true);
+
         let chatId = selectedChatId;
         if (authToken && chatId == null && onCreateChat) {
-            const inferredTitle = prompt.substring(0, 50) + (prompt.length > 50 ? "..." : "");
+            const inferredTitle = await inferChatTitle(prompt);
             setChatTitle(inferredTitle);
             try {
                 const newId = await onCreateChat(inferredTitle); //here we wait for the chat to be created
@@ -152,6 +200,7 @@ const Chat: React.FC<ChatProps> = ({ selectedChatId, authToken, onCreateChat }) 
             let response: Response;
 
             if (images.length > 0) {
+                console.log("Sending images with the message, using FormData"); //ovde dodje
                 // Use FormData for multipart request with images
                 const formData = new FormData();
                 formData.append("session_id", sessionIdRef.current);
@@ -217,6 +266,8 @@ const Chat: React.FC<ChatProps> = ({ selectedChatId, authToken, onCreateChat }) 
             });
         } finally {
             controllerRef.current = null;
+            setIsGenerating(false);
+            setUserHasScrolled(false);
         }
     };
 
@@ -243,7 +294,10 @@ const Chat: React.FC<ChatProps> = ({ selectedChatId, authToken, onCreateChat }) 
         <div className="flex flex-col h-full bg-gray-100 p-6">
             <div className="flex flex-col w-full h-full border rounded-xl shadow-lg bg-white overflow-hidden">
                 {/* Messages */}
-                <div className="flex-1 overflow-y-auto p-6 space-y-4 bg-gray-50 relative">
+                <div
+                    ref={messagesContainerRef}
+                    className="flex-1 overflow-y-auto p-6 space-y-4 bg-gray-50 relative"
+                >
                     {messages.length === 0 && selectedChatId === null && (
                         <div className="absolute inset-0 flex justify-center items-center text-gray-400 text-sm">
                             Start a new chat

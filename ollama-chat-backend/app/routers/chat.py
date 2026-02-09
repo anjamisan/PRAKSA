@@ -8,6 +8,7 @@ import base64
 
 from app.models import ConversationRequest, StopRequest
 from app.sessions import sessions, SessionState
+from app.config import OLLAMA_MODEL, OLLAMA_MODEL_SMALL
 
 router = APIRouter()
 client = ollama.Client()
@@ -79,14 +80,15 @@ def generate_response(session: SessionState, user_message: str, images: list[byt
     # Build user message with optional images
     user_msg = {"role": "user", "content": user_message}
     if images:
-        # Ollama expects base64-encoded images
+        # the images are base64 strings 
         user_msg["images"] = [base64.b64encode(img).decode("utf-8") for img in images]
+        #user_msg["images"] = images # send raw bytes, let model handle it as it can detect image format from bytes
     
     session.messages.append(user_msg)
     response_content = ""
 
     for part in client.chat(
-        model="gemma3:27b-cloud", #llama3.2:latest
+        model=OLLAMA_MODEL,
         messages=session.messages,
         tools=tool_definitions,
         stream=True,
@@ -108,7 +110,7 @@ def generate_response(session: SessionState, user_message: str, images: list[byt
 
             # second model call
             for part in client.chat(
-                model="gemma3:27b-cloud", #llama3.2:latest
+                model=OLLAMA_MODEL,
                 messages=session.messages,
                 stream=True,
             ):
@@ -134,31 +136,70 @@ def generate_response(session: SessionState, user_message: str, images: list[byt
         )
 
 
+@router.post("/title")
+async def generate_title(request: Request):
+    body = await request.json()
+    message = body.get("message", "")
+    
+    if not message.strip():
+        return {"title": "New Chat"}
+    
+    try:
+        response = client.chat(
+            model=OLLAMA_MODEL_SMALL,
+            messages=[
+                {
+                    "role": "system",
+                    "content": "Generate a short, concise title (max 50 characters) for a chat that starts with the following message. Only respond with the title, nothing else. Don't use any text markdown. Only plain text is allowed. Characters like * or quotes are FORBIDDEN in the title.",
+                },
+                {"role": "user", "content": message}
+            ],
+            stream=False,
+        )
+        title = response["message"]["content"].strip()
+        print(f"Generated title: {title}")  # Debug
+        # Ensure title is not too long
+        if len(title) > 50:
+            title = title[:47] + "..."
+        return {"title": title}
+    except Exception as e:
+        print(f"Error generating title: {e}")
+        # Fallback to truncated message
+        fallback = message[:50] + ("..." if len(message) > 50 else "")
+        return {"title": fallback}
+
 @router.post("/chat")
 async def chat_endpoint(request: Request):
+    # Determine if request is JSON (text-only) or multipart/form-data (with images)
     content_type = request.headers.get("content-type", "")
     
     if "multipart/form-data" in content_type:
-        # Handle FormData with images
+        print("MULTIPART/FORM-DATA detected")  # Debug
+        # Vadim slike
         form = await request.form()
         session_id = form.get("session_id")
         message = form.get("message", "")
         
         # Get all uploaded images
-        image_data = []
+        image_data = [] #lista slika u bajtovima
+        print("Form keys:", list(form.keys())) # Debug
         for key in form:
             if key == "images":
+                print("STIGLA SLIKA")  # Debug
                 files = form.getlist("images")
+                print(f"Number of files uploaded: {len(files)}")  # Debug
                 for file in files:
-                    if isinstance(file, UploadFile):
+                    if hasattr(file, 'read'):
+                        print("is instance of file or UploadFile")  # Debug
                         img_bytes = await file.read()
                         image_data.append(img_bytes)
+                        print(f"Read image: {len(img_bytes)} bytes")  # Debug
         
         if not message.strip() and not image_data:
             raise HTTPException(status_code=400, detail="No message or images provided")
         
     else:
-        # Handle JSON (text-only)
+        # Ako je samo tekst onda je json
         body = await request.json()
         session_id = body.get("session_id")
         message = body.get("message", "")

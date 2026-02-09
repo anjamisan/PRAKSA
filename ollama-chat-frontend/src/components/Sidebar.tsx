@@ -4,6 +4,7 @@ import { Trash2, Plus } from "lucide-react";
 interface ChatSession {
     id: number;
     title: string;
+    createdAt?: string; // Add this if your backend provides it
 }
 
 interface SidebarProps {
@@ -22,6 +23,14 @@ const Sidebar: React.FC<SidebarProps> = ({
     onNewChat,
 }) => {
     const [deleting, setDeleting] = useState<number | null>(null);
+
+    // Sort chats by createdAt (newest first), fallback to id (higher = newer)
+    const sortedChats = [...chats].sort((a, b) => {
+        if (a.createdAt && b.createdAt) {
+            return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+        }
+        return b.id - a.id; // Fallback: higher id = newer
+    });
 
     const handleDelete = async (chatId: number) => {
         setDeleting(chatId);
@@ -43,15 +52,15 @@ const Sidebar: React.FC<SidebarProps> = ({
             </button>
 
             <div className="flex-1 overflow-y-auto space-y-2">
-                {chats.length === 0 ? (
+                {sortedChats.length === 0 ? (
                     <p className="text-gray-400 text-sm text-center py-4">No chats yet</p>
                 ) : (
-                    chats.map((chat) => (
+                    sortedChats.map((chat) => (
                         <div
                             key={chat.id}
                             className={`flex items-center justify-between p-3 rounded-md cursor-pointer group ${selectedChatId === chat.id
-                                    ? "bg-gray-700"
-                                    : "hover:bg-gray-800 bg-gray-800"
+                                ? "bg-gray-700"
+                                : "hover:bg-gray-800 bg-gray-800"
                                 }`}
                         >
                             <button

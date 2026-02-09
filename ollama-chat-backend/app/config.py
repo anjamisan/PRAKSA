@@ -1,8 +1,12 @@
-from dotenv import load_dotenv
 import os
-from urllib.parse import quote_plus
+from dotenv import load_dotenv
 
-load_dotenv()  # reads .env
+load_dotenv()
+
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen3-vl:235b-cloud")
+OLLAMA_MODEL_SMALL = os.getenv("OLLAMA_MODEL_SMALL", "llama3.2:latest")
+
+from urllib.parse import quote_plus
 
 DB_HOST = os.getenv("DB_HOST")
 DB_PORT = int(os.getenv("DB_PORT", 3306))
