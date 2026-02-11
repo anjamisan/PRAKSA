@@ -8,7 +8,7 @@ import base64
 
 from app.models import ConversationRequest, StopRequest
 from app.sessions import sessions, SessionState
-from app.config import OLLAMA_MODEL, OLLAMA_MODEL_SMALL
+from app.config import MODEL1, MODEL2, MODEL3, MODEL4, OLLAMA_MODEL_SMALL
 
 router = APIRouter()
 client = ollama.Client()
@@ -71,7 +71,7 @@ def handle_tool_calls(session: SessionState, tool_calls: list[dict]):
     session.messages.extend(tool_messages)
 
 
-def generate_response(session: SessionState, user_message: str, images: list[bytes] = None):
+def generate_response(session: SessionState, user_message: str, model: int, images: list[bytes] = None):
     # Create a unique generation id
     generation_id = str(uuid.uuid4())
     session.generation_id = generation_id
@@ -86,9 +86,19 @@ def generate_response(session: SessionState, user_message: str, images: list[byt
     
     session.messages.append(user_msg)
     response_content = ""
+    match(model):
+        case 1:
+            model_name = MODEL1
+        case 2:
+            model_name = MODEL2
+        case 3:
+            model_name = MODEL3
+        case _:
+            model_name = MODEL4
 
+    print(f"\nSelected model: {model_name}\n")  # Debug
     for part in client.chat(
-        model=OLLAMA_MODEL,
+        model=model_name,
         messages=session.messages,
         tools=tool_definitions,
         stream=True,
@@ -110,7 +120,7 @@ def generate_response(session: SessionState, user_message: str, images: list[byt
 
             # second model call
             for part in client.chat(
-                model=OLLAMA_MODEL,
+                model=model_name,
                 messages=session.messages,
                 stream=True,
             ):
@@ -172,6 +182,7 @@ async def generate_title(request: Request):
 async def chat_endpoint(request: Request):
     # Determine if request is JSON (text-only) or multipart/form-data (with images)
     content_type = request.headers.get("content-type", "")
+
     
     if "multipart/form-data" in content_type:
         print("MULTIPART/FORM-DATA detected")  # Debug
@@ -179,6 +190,7 @@ async def chat_endpoint(request: Request):
         form = await request.form()
         session_id = form.get("session_id")
         message = form.get("message", "")
+        model = int(form.get("model_index", 4)) #default to model 4 if not provided
         
         # Get all uploaded images
         image_data = [] #lista slika u bajtovima
@@ -203,6 +215,7 @@ async def chat_endpoint(request: Request):
         body = await request.json()
         session_id = body.get("session_id")
         message = body.get("message", "")
+        model = int(body.get("model_index", 4)) #default to model 4 if not provided
         image_data = None
         
         if not message.strip():
@@ -215,7 +228,7 @@ async def chat_endpoint(request: Request):
     session = sessions[session_id]
 
     return StreamingResponse(
-        generate_response(session, message, image_data),
+        generate_response(session, message, model, image_data),
         media_type="text/plain",
     )
 

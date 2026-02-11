@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import MessageBubble from "./MessageBubble";
 import ChatInput from "./ChatInput";
+import ModelPicker, { ModelIndex } from "./ModelPicker";
 
 type Message = {
     role: "user" | "assistant";
@@ -21,6 +22,7 @@ const Chat: React.FC<ChatProps> = ({ selectedChatId, authToken, onCreateChat }) 
     const [chatCreated, setChatCreated] = useState<boolean>(false);
     const [isGenerating, setIsGenerating] = useState<boolean>(false); //to track if we're currently waiting for a response from the backend
     const [userHasScrolled, setUserHasScrolled] = useState<boolean>(false); //to stop automatic scrolling when user scrolls up during generation
+    const [selectedModel, setSelectedModel] = useState<ModelIndex>(ModelIndex.MINISTRAL);
     const sessionIdRef = useRef<string>(crypto.randomUUID());
     const controllerRef = useRef<AbortController | null>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -205,6 +207,7 @@ const Chat: React.FC<ChatProps> = ({ selectedChatId, authToken, onCreateChat }) 
                 const formData = new FormData();
                 formData.append("session_id", sessionIdRef.current);
                 formData.append("message", prompt);
+                formData.append("model_index", String(selectedModel));
                 images.forEach((image) => {
                     formData.append("images", image);
                 });
@@ -219,7 +222,11 @@ const Chat: React.FC<ChatProps> = ({ selectedChatId, authToken, onCreateChat }) 
                 response = await fetch("http://localhost:8000/chat", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ session_id: sessionIdRef.current, message: prompt }),
+                    body: JSON.stringify({
+                        session_id: sessionIdRef.current,
+                        message: prompt,
+                        model_index: selectedModel,
+                    }),
                     signal: controllerRef.current.signal,
                 });
             }
@@ -307,6 +314,18 @@ const Chat: React.FC<ChatProps> = ({ selectedChatId, authToken, onCreateChat }) 
                         <MessageBubble key={i} role={msg.role} content={msg.content} />
                     ))}
                     <div ref={messagesEndRef} />
+                </div>
+
+                {/* Model picker */}
+                <div className="px-6 py-2 border-t bg-white">
+                    <div className="flex items-center justify-between">
+                        <ModelPicker value={selectedModel} onChange={setSelectedModel} />
+                        {(selectedModel === ModelIndex.LLAMA || selectedModel === ModelIndex.GPT_OSS) && (
+                            <span className="text-xs text-amber-600">
+                                This model can't analyze photos.
+                            </span>
+                        )}
+                    </div>
                 </div>
 
                 {/* Input area */}
