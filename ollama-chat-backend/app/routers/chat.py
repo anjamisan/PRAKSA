@@ -2,7 +2,7 @@
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
-from app.ollama_handler import generate_response, generate_title
+from app.ollama_handler import generate_response, generate_title as infer_title
 
 from app.models import StopRequest
 from app.sessions import sessions, SessionState
@@ -11,14 +11,14 @@ router = APIRouter()
 
 
 @router.post("/title")
-async def generate_title(request: Request):
+async def generate_title_endpoint(request: Request):
     body = await request.json()
     message = body.get("message", "")
     
     if not message.strip():
         return {"title": "New Chat"}
     
-    title = generate_title(message)
+    title = infer_title(message)
     return {"title": title}
 
 @router.post("/chat")
