@@ -5,17 +5,6 @@ load_dotenv()
 
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "ministral-3:14b-cloud")
 OLLAMA_MODEL_SMALL = os.getenv("OLLAMA_MODEL_SMALL", "ministral-3:3b-cloud")
-MODEL1 = os.getenv("MODEL1", "llama3.2:latest")
-MODEL2 = os.getenv("MODEL2", "gpt-oss:120b-cloud")
-MODEL3 = os.getenv("MODEL3", "qwen3-vl:235b-cloud")
-MODEL4 = os.getenv("MODEL4", "ministral-3:14b-cloud")
-
-MODEL_MAP = {
-    1: MODEL1,
-    2: MODEL2,
-    3: MODEL3,
-    4: MODEL4,
-}
 
 from urllib.parse import quote_plus
 

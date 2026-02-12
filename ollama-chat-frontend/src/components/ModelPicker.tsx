@@ -1,17 +1,10 @@
 import React from "react";
 
-export const ModelIndex = {
-    LLAMA: 1,
-    GPT_OSS: 2,
-    QWEN: 3,
-    MINISTRAL: 4,
-} as const;
 
-export type ModelIndex = typeof ModelIndex[keyof typeof ModelIndex];
 
 const ModelPicker: React.FC<{
-    value: ModelIndex;
-    onChange: (value: ModelIndex) => void;
+    value: string;
+    onChange: (value: string) => void;
 }> = ({ value, onChange }) => {
     return (
         <div className="flex items-center gap-3">
@@ -19,12 +12,12 @@ const ModelPicker: React.FC<{
             <select
                 className="border rounded-md px-2 py-1 text-sm"
                 value={value}
-                onChange={(e) => onChange(Number(e.target.value) as ModelIndex)}
+                onChange={(e) => onChange(e.target.value)}
             >
-                <option value={ModelIndex.LLAMA}>llama</option>
-                <option value={ModelIndex.GPT_OSS}>gpt-oss</option>
-                <option value={ModelIndex.QWEN}>qwen</option>
-                <option value={ModelIndex.MINISTRAL}>ministral</option>
+                <option value={"llama3.2:latest"}>llama</option>
+                <option value={"gpt-oss:120b-cloud"}>gpt-oss</option>
+                <option value={"qwen3-vl:235b-cloud"}>qwen</option>
+                <option value={"ministral-3:14b-cloud"}>ministral</option>
             </select>
         </div>
     );

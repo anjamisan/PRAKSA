@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import MessageBubble from "./MessageBubble";
 import ChatInput from "./ChatInput";
-import ModelPicker, { ModelIndex } from "./ModelPicker";
+import ModelPicker from "./ModelPicker";
 
 type Message = {
     role: "user" | "assistant";
@@ -22,7 +22,7 @@ const Chat: React.FC<ChatProps> = ({ selectedChatId, authToken, onCreateChat }) 
     const [chatCreated, setChatCreated] = useState<boolean>(false);
     const [isGenerating, setIsGenerating] = useState<boolean>(false); //to track if we're currently waiting for a response from the backend
     const [userHasScrolled, setUserHasScrolled] = useState<boolean>(false); //to stop automatic scrolling when user scrolls up during generation
-    const [selectedModel, setSelectedModel] = useState<ModelIndex>(ModelIndex.MINISTRAL);
+    const [selectedModel, setSelectedModel] = useState<string>("ministral-3:14b-cloud");
     const sessionIdRef = useRef<string>(crypto.randomUUID());
     const controllerRef = useRef<AbortController | null>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -207,7 +207,7 @@ const Chat: React.FC<ChatProps> = ({ selectedChatId, authToken, onCreateChat }) 
                 const formData = new FormData();
                 formData.append("session_id", sessionIdRef.current);
                 formData.append("message", prompt);
-                formData.append("model_index", String(selectedModel));
+                formData.append("model_index", selectedModel);
                 images.forEach((image) => {
                     formData.append("images", image);
                 });
@@ -320,7 +320,7 @@ const Chat: React.FC<ChatProps> = ({ selectedChatId, authToken, onCreateChat }) 
                 <div className="px-6 py-2 border-t bg-white">
                     <div className="flex items-center justify-between">
                         <ModelPicker value={selectedModel} onChange={setSelectedModel} />
-                        {(selectedModel === ModelIndex.LLAMA || selectedModel === ModelIndex.GPT_OSS) && (
+                        {(selectedModel === "llama3.2:latest" || selectedModel === "gpt-oss:120b-cloud") && (
                             <span className="text-xs text-amber-600">
                                 This model can't analyze photos.
                             </span>
