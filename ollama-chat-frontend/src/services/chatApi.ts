@@ -62,6 +62,7 @@ export async function sendChatMessage(
     images: File[],
     signal: AbortSignal
 ): Promise<Response> {
+
     if (images.length > 0) {
         const formData = new FormData();
         formData.append("session_id", sessionId);

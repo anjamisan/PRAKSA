@@ -1,6 +1,8 @@
 import asyncio
 from typing import Dict, List
 
+#chat sesije
+
 class SessionState:
     def __init__(self):
         self.messages: List[dict] = []
