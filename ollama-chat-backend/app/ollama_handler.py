@@ -63,7 +63,6 @@ def handle_tool_calls(session: SessionState, tool_calls: list[dict]):
             "tool_name": fn_name,
             "content": str(result),
         })
-
     # Append all tool outputs
     session.messages.extend(tool_messages)
 
