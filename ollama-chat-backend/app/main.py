@@ -14,6 +14,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+#include all endpoints
 app.include_router(chat_router)
 app.include_router(user_router)
 
@@ -21,10 +22,6 @@ app.include_router(user_router)
 def read_root():
     return {"status": "ok"}
 
-# Call this on startup
-# @app.on_event("startup")
-# def on_startup():
-#     create_db_and_tables()
 
 
 

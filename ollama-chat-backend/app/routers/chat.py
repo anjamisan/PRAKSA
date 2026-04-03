@@ -85,27 +85,8 @@ async def stop_generation(request: StopRequest):
 
     session.cancel_event.set()
     session.generation_id = None
+    # removes the last user message to prevent it from being included in future generations if user continues the conversation after stopping
     if session.messages and session.messages[-1]["role"] == "user":
         session.messages.pop()
 
     return {"status": "stopped"}
-
-# @router.post("/chat/full")
-# async def chat_full_endpoint(request: ChatRequest):
-#     if not request.message.strip():
-#         raise HTTPException(status_code=400, detail="No message provided")
-    
-#     global messages
-#     messages.append({"role": "user", "content": request.message})
-    
-#     try:
-#         # Get full response without streaming
-#         response = ollama.chat('llama3.2:latest', messages=messages, stream=False)
-#         full_content = response['message']['content']
-        
-#         messages.append({"role": "assistant", "content": full_content})
-        
-#         return {"response": full_content}
-#     except Exception as e:
-#         print(f"Error in chat_full_endpoint: {e}")
-#         raise HTTPException(status_code=500, detail=str(e))

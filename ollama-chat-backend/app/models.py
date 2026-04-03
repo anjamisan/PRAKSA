@@ -5,6 +5,8 @@ from typing import Optional, List
 from datetime import datetime
 
 
+#pydantic - api request/response models
+
 class ConversationRequest(BaseModel):
     session_id: str
     message: str
@@ -31,7 +33,7 @@ class MessageRequest(BaseModel):
 
 ####### DB ################
 
-
+# SQLModel - database models
 class User(SQLModel, table=True):
     __tablename__ = "users"
     id: Optional[int] = Field(default=None, primary_key=True)

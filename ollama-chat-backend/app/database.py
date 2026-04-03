@@ -5,6 +5,7 @@ from app import models
 
 engine = create_engine(DATABASE_URL, echo=True)
 
+# dependency function that provides database sessions to route handlers
 def get_session():
     """Yield a SQLModel session"""
     with Session(engine) as session:
